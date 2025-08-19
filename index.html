@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アバターと会話</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- 追加スタイル（最小限の差分: クイックボタン&演出） -->
+    <style>
+    .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .quick-btn { padding: 10px 14px; border: none; border-radius: 12px; background: linear-gradient(135deg, #42a5f5 0%, #5c6bc0 100%); color: #fff; cursor: pointer; box-shadow: 0 6px 16px rgba(76, 92, 175, 0.25); transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+    .quick-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(76, 92, 175, 0.35); filter: brightness(1.05); }
+
+    .fx-layer { pointer-events: none; position: fixed; inset: 0; z-index: 1500; }
+    .burst, .slash, .spark, .shield, .card-flip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+    .burst { width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.95) 0%, rgba(255,193,7,.9) 35%, rgba(255,87,34,.7) 60%, rgba(255,87,34,0) 70%); animation: burstScale 600ms ease-out forwards; box-shadow: 0 0 60px rgba(255,193,7,.65), 0 0 120px rgba(255,87,34,.35) inset; }
+    @keyframes burstScale { 0% { transform: translate(-50%, -50%) scale(.1); opacity: 0; } 60% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(.9); opacity: 0; } }
+    .slash { width: 260px; height: 6px; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, #fff 20%, #ff5252 50%, #fff 80%, rgba(255,255,255,0) 100%); box-shadow: 0 0 24px rgba(255,82,82,.65); transform-origin: left center; animation: slashMove 500ms cubic-bezier(.11,.79,.22,1) forwards; }
+    @keyframes slashMove { 0% { transform: translate(-50%, -50%) rotate(-20deg) scaleX(0); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(-50%, -50%) rotate(10deg) scaleX(1); opacity: 0; } }
+    .spark { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle, #fff 0%, #ffeb3b 60%, rgba(255,235,59,0) 70%); box-shadow: 0 0 24px rgba(255,235,59,.9); animation: sparkFloat 800ms ease-out forwards; }
+    @keyframes sparkFloat { 0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, -100px))) scale(.1); opacity: 0; } }
+    .shield { width: 180px; height: 180px; border-radius: 50%; background: conic-gradient(from 0deg, rgba(102,126,234,.8), rgba(118,75,162,.8)); box-shadow: 0 0 50px rgba(102,126,234,.6); animation: shieldPulse 900ms ease-out forwards; }
+    @keyframes shieldPulse { 0% { transform: translate(-50%, -50%) scale(.6); opacity: 0; } 40% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.05); opacity: 0; } }
+    .card-flip { width: 220px; height: 300px; perspective: 1000px; }
+    .card-flip-inner { width: 100%; height: 100%; transform-style: preserve-3d; animation: flip 600ms ease-out forwards; }
+    .card-face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 48px; color: #fff; }
+    .card-front { background: linear-gradient(135deg, #667eea, #764ba2); }
+    .card-back { background: linear-gradient(135deg, #ff8a65, #ff7043); transform: rotateY(180deg); }
+    @keyframes flip { 0% { transform: rotateY(0deg); } 100% { transform: rotateY(180deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="scene">
+            <div class="avatar-area">
+                <div class="avatar" id="avatar">🤖</div>
+            </div>
+            <div class="speech" id="speechBubble"></div>
+            <div class="input-section" id="inputSection">
+                <div class="input-container">
+                    <input type="text" id="userInput" placeholder="ここに入力...（最初の名前のみ）" disabled>
+                    <button id="sendButton" disabled>送信</button>
+                </div>
+                <div class="quick-actions" id="quickActions"></div>
+                <div id="fxLayer" class="fx-layer"></div>
+            </div>
+        </div>
+        
+        <!-- ゲーム選択モーダル -->
+        <div class="modal" id="gameModal">
+            <div class="modal-content">
+                <h2>ゲームを選択してください</h2>
+                <div class="game-options">
+                    <button class="game-btn" data-game="1">1: じゃんけん</button>
+                    <button class="game-btn" data-game="2">2: HIGH & LOW</button>
+                    <button class="game-btn" data-game="3">3: ポケモンバトル</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ポケモン選択モーダル -->
+        <div class="modal" id="pokemonModal">
+            <div class="modal-content">
+                <h2>ポケモンを選択してください</h2>
+                <div class="pokemon-options" id="pokemonOptions">
+                    <!-- ポケモンオプションがここに表示されます -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- バトルアクション選択モーダル -->
+        <div class="modal" id="battleModal">
+            <div class="modal-content">
+                <h2>アクションを選択してください</h2>
+                <div class="battle-options">
+                    <button class="battle-btn" data-action="attack">1: 攻撃</button>
+                    <button class="battle-btn" data-action="defend">2: 防御</button>
+                    <button class="battle-btn" data-action="skill" id="skillBtn">3: 特殊ワザ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html> 
